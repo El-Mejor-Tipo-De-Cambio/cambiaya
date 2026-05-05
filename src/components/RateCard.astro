@@ -1,0 +1,144 @@
+---
+interface Props {
+  pair: string;
+  binanceRate?: number;
+  borderRate?: number;
+  borderRemesador?: string;
+  lastUpdated?: number;
+}
+
+const { pair, binanceRate, borderRate, borderRemesador, lastUpdated } = Astro.props;
+
+const [from, to] = pair.split('/');
+const flags: Record<string, string> = {
+  'CLP': '🇨🇱', 'ARS': '🇦🇷', 'BRL': '🇧🇷',
+  'PEN': '🇵🇪', 'PYG': '🇵🇾', 'BOB': '🇧🇴'
+};
+const flag = flags[from] || '';
+---
+
+<div class="rate-card">
+  <div class="rate-header">
+    <span class="currency-pair">{flag} {from}/{to}</span>
+    {borderRate && borderRemesador && (
+      <span class="remesador-badge" title={`Remesador: ${borderRemesador}`}>
+        📍 {borderRemesador}
+      </span>
+    )}
+  </div>
+
+  <div class="rates-list">
+    {binanceRate && (
+      <div class="rate-item">
+        <span class="source-badge source-binance">Binance</span>
+        <span class="rate-value">{binanceRate.toFixed(4)}</span>
+      </div>
+    )}
+
+    {borderRate && (
+      <div class="rate-item">
+        <span class="source-badge source-border">Frontera</span>
+        <span class="rate-value">{borderRate.toFixed(4)}</span>
+      </div>
+    )}
+
+    {!binanceRate && !borderRate && (
+      <div class="rate-unavailable">No disponible</div>
+    )}
+  </div>
+
+  {lastUpdated && (
+    <div class="rate-meta">
+      Actualizado: {new Date(lastUpdated).toLocaleString('es-ES', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })}
+    </div>
+  )}
+</div>
+
+<style>
+  .rate-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    transition: border-color 0.2s;
+  }
+
+  .rate-card:hover {
+    border-color: var(--color-accent);
+  }
+
+  .rate-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .currency-pair {
+    font-weight: 600;
+    font-size: 1.125rem;
+  }
+
+  .remesador-badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    background: rgba(16, 185, 129, 0.15);
+    border-radius: 9999px;
+    color: var(--color-success);
+  }
+
+  .rates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .rate-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .source-badge {
+    font-size: 0.65rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    text-transform: uppercase;
+    font-weight: 600;
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .source-binance {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--color-accent);
+  }
+
+  .source-border {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--color-success);
+  }
+
+  .rate-value {
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .rate-unavailable {
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .rate-meta {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--color-border);
+  }
+</style>

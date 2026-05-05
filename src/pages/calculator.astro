@@ -1,0 +1,260 @@
+---
+import Layout from '../layouts/Layout.astro';
+import CustomSelect from '../components/CustomSelect.astro';
+import AmountInput from '../components/AmountInput.astro';
+
+const currencyOptions = [
+  { value: 'BOB', label: 'BOB - Boliviano', flag: '🇧🇴' },
+  { value: 'CLP', label: 'CLP - Peso Chileno', flag: '🇨🇱' },
+  { value: 'ARS', label: 'ARS - Peso Argentino', flag: '🇦🇷' },
+  { value: 'BRL', label: 'BRL - Real Brasileño', flag: '🇧🇷' },
+  { value: 'PEN', label: 'PEN - Sol Peruano', flag: '🇵🇪' },
+  { value: 'PYG', label: 'PYG - Guaraní', flag: '🇵🇾' },
+  { value: 'USD', label: 'USD - Dólar', flag: '🇺🇸' },
+];
+---
+
+<Layout title="Calculadora - ISRA">
+  <header>
+    <div class="container header-content">
+      <div class="logo">ISRA</div>
+      <nav>
+        <a href="/">Inicio</a>
+        <a href="/calculator">Calculadora</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <h1>Calculadora de cambio</h1>
+      <p class="subtitle">Convierte entre monedas al instante</p>
+
+      <div class="calculator-card">
+        <div class="calc-label">¿Cuánto quieres enviar?</div>
+
+        <div class="calc-amount-row">
+          <AmountInput id="amount" placeholder="0.00" />
+          <button class="swap-btn" id="swap-btn" title="Intercambiar">⇄</button>
+        </div>
+
+        <div class="currency-select">
+          <CustomSelect id="from-currency" options={currencyOptions} value="CLP" />
+          <CustomSelect id="to-currency" options={currencyOptions} value="BOB" />
+        </div>
+
+        <div class="source-select">
+          <button class="source-btn active" data-source="binance">📈 Binance</button>
+          <button class="source-btn" data-source="border">📍 Frontera</button>
+        </div>
+
+        <div id="result-box" class="result-box" style="display: none;">
+          <div class="result-label">Recibirías</div>
+          <div id="result-amount" class="result-amount">—</div>
+          <div id="result-rate" class="result-rate">—</div>
+        </div>
+      </div>
+
+      <div class="disclaimer">
+        <strong>Importante:</strong> Las tasas son referenciales. Consultá siempre con tu remesador de confianza para tasas reales.
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>© 2024 ISRA</p>
+    </div>
+  </footer>
+</Layout>
+
+<script>
+  const USE_MOCK = true;
+
+  const CURRENCIES: Record<string, { flag: string; name: string }> = {
+    'BOB': { flag: '🇧🇴', name: 'Boliviano' },
+    'CLP': { flag: '🇨🇱', name: 'Peso Chileno' },
+    'ARS': { flag: '🇦🇷', name: 'Peso Argentino' },
+    'BRL': { flag: '🇧🇷', name: 'Real' },
+    'PEN': { flag: '🇵🇪', name: 'Sol' },
+    'PYG': { flag: '🇵🇾', name: 'Guaraní' },
+    'USD': { flag: '🇺🇸', name: 'Dólar' },
+  };
+
+  const MOCK_RATES: Record<string, { binance: number; border?: number }> = {
+    'CLP/BOB': { binance: 0.00742, border: 0.00768 },
+    'ARS/BOB': { binance: 0.00487, border: 0.00512 },
+    'BRL/BOB': { binance: 0.89234, border: 0.90500 },
+    'PEN/BOB': { binance: 0.93512, border: 0.94200 },
+    'PYG/BOB': { binance: 0.00092, border: 0.00095 },
+    'USD/BOB': { binance: 6.91, border: 6.95 },
+  };
+
+  let currentSource = 'binance';
+  let fromCurrency = 'CLP';
+  let toCurrency = 'BOB';
+
+  function getRate(from: string, to: string, source: string): number {
+    if (from === to) return 1;
+    const direct = `${from}/${to}`;
+    const inverse = `${to}/${from}`;
+    if (MOCK_RATES[direct]) {
+      return source === 'border' && MOCK_RATES[direct].border ? MOCK_RATES[direct].border! : MOCK_RATES[direct].binance;
+    }
+    if (MOCK_RATES[inverse]) {
+      const rate = source === 'border' && MOCK_RATES[inverse].border ? MOCK_RATES[inverse].border! : MOCK_RATES[inverse].binance;
+      return 1 / rate;
+    }
+    return 1;
+  }
+
+  function calculate(amount: number) {
+    if (!amount || amount <= 0 || fromCurrency === toCurrency) {
+      document.getElementById('result-box')!.style.display = 'none';
+      return;
+    }
+
+    const rate = getRate(fromCurrency, toCurrency, currentSource);
+    const result = amount * rate;
+
+    const resultBox = document.getElementById('result-box')!;
+    const resultAmount = document.getElementById('result-amount')!;
+    const resultRate = document.getElementById('result-rate')!;
+
+    resultBox.style.display = 'block';
+    resultAmount.textContent = `${result.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${CURRENCIES[toCurrency].flag} ${CURRENCIES[toCurrency].name}`;
+    resultRate.textContent = `1 ${fromCurrency} = ${rate < 1 ? rate.toFixed(6) : rate.toFixed(4)} ${toCurrency} · ${currentSource === 'binance' ? '📈 Binance' : '📍 Frontera'}`;
+  }
+
+  function setupSelectListeners() {
+    document.querySelectorAll('.custom-select').forEach(container => {
+      container.addEventListener('select-change', (e: Event) => {
+        const customEvent = e as CustomEvent<{ value: string; label: string }>;
+        const selectId = container.getAttribute('data-id');
+
+        if (selectId === 'from-currency') {
+          fromCurrency = customEvent.detail.value;
+        } else if (selectId === 'to-currency') {
+          toCurrency = customEvent.detail.value;
+        }
+
+        const amountInput = document.getElementById('amount');
+        if (amountInput) {
+          amountInput.dispatchEvent(new CustomEvent('amount-trigger-calculate'));
+        }
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', setupSelectListeners);
+  document.addEventListener('astro:after-swap', setupSelectListeners);
+
+  document.getElementById('amount')?.addEventListener('amount-change', (e: Event) => {
+    const customEvent = e as CustomEvent<{ value: number }>;
+    calculate(customEvent.detail.value);
+  });
+
+  document.getElementById('swap-btn')?.addEventListener('click', () => {
+    const temp = fromCurrency;
+    fromCurrency = toCurrency;
+    toCurrency = temp;
+
+    document.querySelectorAll('.custom-select').forEach(container => {
+      const trigger = container.querySelector('.select-trigger');
+      const selectId = container.getAttribute('data-id');
+      const value = selectId === 'from-currency' ? fromCurrency : toCurrency;
+      const options = container.querySelectorAll('.select-option');
+
+      options.forEach(opt => opt.classList.remove('selected'));
+      const selectedOption = container.querySelector(`[data-value="${value}"]`);
+      if (selectedOption) {
+        selectedOption.classList.add('selected');
+        const labelSpan = trigger?.querySelector('.select-value');
+        if (labelSpan && selectedOption) {
+          const flag = selectedOption.querySelector('.select-flag');
+          labelSpan.innerHTML = (flag ? `<span class="select-flag">${flag.textContent}</span>` : '') + selectedOption.textContent?.trim().replace(/^[^\s]+\s*/, '');
+        }
+        trigger?.setAttribute('data-value', value);
+      }
+    });
+
+    const amountInput = document.getElementById('amount');
+    if (amountInput) {
+      amountInput.dispatchEvent(new CustomEvent('amount-trigger-calculate'));
+    }
+  });
+
+  document.querySelectorAll('.source-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentSource = btn.getAttribute('data-source') || 'binance';
+      const amountInput = document.getElementById('amount');
+      if (amountInput) {
+        amountInput.dispatchEvent(new CustomEvent('amount-trigger-calculate'));
+      }
+    });
+  });
+</script>
+
+<style>
+  .calc-amount-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .swap-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: var(--text-muted);
+    transition: all 0.2s;
+    flex-shrink: 0;
+    margin-top: 22px;
+  }
+
+  .swap-btn:hover {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .currency-select {
+    display: flex;
+    gap: 8px;
+  }
+
+  .source-select {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+  }
+
+  .source-btn {
+    flex: 1;
+    padding: 10px 16px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .source-btn.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>

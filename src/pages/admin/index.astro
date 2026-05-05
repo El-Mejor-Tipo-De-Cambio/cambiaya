@@ -1,0 +1,454 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Panel Admin - ISRA">
+  <header>
+    <div class="container header-content">
+      <div class="logo">ISRA Admin</div>
+      <nav>
+        <a href="/">← Volver al inicio</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <h1>Panel de Administración</h1>
+      <p class="subtitle">Gestión de remesadores y estadísticas del sistema</p>
+
+      <div id="auth-section" class="auth-section">
+        <p>Ingresa tu API key de administrador para continuar:</p>
+        <div class="auth-form">
+          <input
+            type="password"
+            id="admin-key"
+            placeholder="API Key de administrador"
+            class="input"
+          />
+          <button id="auth-btn" class="auth-btn">Autenticar</button>
+        </div>
+        <div id="auth-error" class="auth-error" style="display: none;"></div>
+      </div>
+
+      <div id="admin-panel" class="admin-panel" style="display: none;">
+        <section class="panel-section">
+          <h2>📊 Estadísticas del Sistema</h2>
+          <div id="stats-grid" class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Total de rates</div>
+              <div id="stat-total-rates" class="stat-value">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Remesadores activos</div>
+              <div id="stat-active-remesadores" class="stat-value">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Rates de frontera (hoy)</div>
+              <div id="stat-border-today" class="stat-value">-</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2>👥 Remesadores</h2>
+          <div id="remesadores-loading" class="loading">
+            <div class="spinner"></div>
+            <span>Cargando...</span>
+          </div>
+          <div id="remesadores-list" class="remesadores-list"></div>
+        </section>
+
+        <section class="panel-section">
+          <h2>➕ Crear Nuevo Remesador</h2>
+          <div class="create-form">
+            <input
+              type="text"
+              id="new-remesador-name"
+              placeholder="Nombre del remesador"
+              class="input"
+            />
+            <button id="create-btn" class="create-btn">Crear</button>
+          </div>
+          <div id="create-result" class="create-result" style="display: none;"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  let adminKey = '';
+
+  document.getElementById('auth-btn')?.addEventListener('click', async () => {
+    const keyInput = document.getElementById('admin-key') as HTMLInputElement;
+    const errorEl = document.getElementById('auth-error')!;
+
+    adminKey = keyInput.value.trim();
+    if (!adminKey) {
+      errorEl.textContent = 'Ingresa una API key';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    // Test the key by fetching stats
+    try {
+      const API_BASE = import.meta.env.PUBLIC_API_URL || '/api';
+      const response = await fetch(`${API_BASE}/admin/stats`, {
+        headers: { 'X-API-Key': adminKey }
+      });
+
+      if (!response.ok) {
+        throw new Error('Invalid API key');
+      }
+
+      // Auth successful
+      document.getElementById('auth-section')!.style.display = 'none';
+      document.getElementById('admin-panel')!.style.display = 'block';
+
+      loadStats();
+      loadRemesadores();
+    } catch (error) {
+      errorEl.textContent = 'API key inválida';
+      errorEl.style.display = 'block';
+    }
+  });
+
+  async function loadStats() {
+    try {
+      const API_BASE = import.meta.env.PUBLIC_API_URL || '/api';
+      const response = await fetch(`${API_BASE}/admin/stats`, {
+        headers: { 'X-API-Key': adminKey }
+      });
+
+      const data = await response.json();
+      const stats = data.stats;
+
+      document.getElementById('stat-total-rates')!.textContent = stats.total_rates;
+      document.getElementById('stat-active-remesadores')!.textContent = stats.active_remesadores;
+      document.getElementById('stat-border-today')!.textContent = stats.border_rates_today;
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  }
+
+  async function loadRemesadores() {
+    const loadingEl = document.getElementById('remesadores-loading')!;
+    const listEl = document.getElementById('remesadores-list')!;
+
+    try {
+      const API_BASE = import.meta.env.PUBLIC_API_URL || '/api';
+      const response = await fetch(`${API_BASE}/admin/remesadores`, {
+        headers: { 'X-API-Key': adminKey }
+      });
+
+      const data = await response.json();
+
+      loadingEl.style.display = 'none';
+
+      if (data.remesadores.length === 0) {
+        listEl.innerHTML = '<p class="empty-state">No hay remesadores registrados</p>';
+        return;
+      }
+
+      listEl.innerHTML = data.remesadores.map((r: any) => `
+        <div class="remesador-card">
+          <div class="remesador-info">
+            <span class="remesador-name">${r.name}</span>
+            <span class="remesador-status status-${r.status}">${r.status}</span>
+          </div>
+          <div class="remesador-meta">
+            ID: ${r.id} | Creado: ${new Date(r.created_at * 1000).toLocaleDateString('es-ES')}
+          </div>
+          ${r.status === 'active' ? `
+            <button class="revoke-btn" data-id="${r.id}">Revocar</button>
+          ` : ''}
+        </div>
+      `).join('');
+
+      // Attach revoke handlers
+      document.querySelectorAll('.revoke-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const id = (e.target as HTMLButtonElement).dataset.id;
+          if (confirm('¿Estás seguro de revocar este remesador?')) {
+            await revokeRemesador(id!);
+          }
+        });
+      });
+
+    } catch (error) {
+      console.error('Error loading remesadores:', error);
+      loadingEl.innerHTML = '<p class="error-state">Error al cargar remesadores</p>';
+    }
+  }
+
+  async function revokeRemesador(id: string) {
+    try {
+      const API_BASE = import.meta.env.PUBLIC_API_URL || '/api';
+      const response = await fetch(`${API_BASE}/admin/remesadores/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-API-Key': adminKey }
+      });
+
+      if (response.ok) {
+        loadRemesadores();
+        loadStats();
+      }
+    } catch (error) {
+      console.error('Error revoking remesador:', error);
+      alert('Error al revocar remesador');
+    }
+  }
+
+  document.getElementById('create-btn')?.addEventListener('click', async () => {
+    const nameInput = document.getElementById('new-remesador-name') as HTMLInputElement;
+    const resultEl = document.getElementById('create-result')!;
+
+    const name = nameInput.value.trim();
+    if (!name) {
+      alert('Ingresa el nombre del remesador');
+      return;
+    }
+
+    try {
+      const API_BASE = import.meta.env.PUBLIC_API_URL || '/api';
+      const response = await fetch(`${API_BASE}/admin/remesadores`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': adminKey
+        },
+        body: JSON.stringify({ name })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = `
+          <div class="success-message">
+            <strong>Remesador creado exitosamente</strong><br>
+            Nombre: ${data.remesador.name}<br>
+            API Key: <code class="api-key">${data.api_key}</code><br>
+            <em>Guarda esta API key — no se mostrará nuevamente</em>
+          </div>
+        `;
+        nameInput.value = '';
+        loadRemesadores();
+        loadStats();
+      }
+    } catch (error) {
+      console.error('Error creating remesador:', error);
+      alert('Error al crear remesador');
+    }
+  });
+</script>
+
+<style>
+  .auth-section {
+    max-width: 400px;
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: var(--color-surface);
+    border-radius: 0.75rem;
+  }
+
+  .auth-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .input {
+    flex: 1;
+    padding: 0.75rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    color: var(--color-text);
+    font-size: 1rem;
+  }
+
+  .input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+  }
+
+  .auth-btn, .create-btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--color-accent);
+    color: var(--color-bg);
+    border: none;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .auth-error {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--color-danger);
+    border-radius: 0.5rem;
+    color: var(--color-danger);
+  }
+
+  .admin-panel {
+    margin-top: 2rem;
+  }
+
+  .panel-section {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--color-surface);
+    border-radius: 0.75rem;
+  }
+
+  .panel-section h2 {
+    font-size: 1.125rem;
+    margin-bottom: 1rem;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+  }
+
+  .stat-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+  }
+
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-top: 0.25rem;
+  }
+
+  .remesadores-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .remesador-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 1rem;
+  }
+
+  .remesador-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .remesador-name {
+    font-weight: 600;
+  }
+
+  .remesador-status {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 9999px;
+    text-transform: uppercase;
+  }
+
+  .status-active {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--color-success);
+  }
+
+  .status-revoked {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-danger);
+  }
+
+  .remesador-meta {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .revoke-btn {
+    padding: 0.4rem 0.75rem;
+    background: transparent;
+    border: 1px solid var(--color-danger);
+    border-radius: 0.375rem;
+    color: var(--color-danger);
+    cursor: pointer;
+    font-size: 0.75rem;
+  }
+
+  .revoke-btn:hover {
+    background: var(--color-danger);
+    color: white;
+  }
+
+  .create-form {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .create-result {
+    margin-top: 1rem;
+  }
+
+  .success-message {
+    padding: 1rem;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid var(--color-success);
+    border-radius: 0.5rem;
+    color: var(--color-text);
+  }
+
+  .api-key {
+    font-family: var(--font-mono);
+    background: var(--color-bg);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+  }
+
+  .empty-state, .error-state {
+    color: var(--color-text-muted);
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--color-text-muted);
+    padding: 2rem;
+    justify-content: center;
+  }
+
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>

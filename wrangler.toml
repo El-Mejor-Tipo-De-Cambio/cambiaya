@@ -1,0 +1,15 @@
+name = "isra-api"
+main = "workers/api/src/index.ts"
+compatibility_date = "2024-10-22"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "isra-db"
+database_id = "YOUR_D1_DATABASE_ID"
+
+[vars]
+BINANCE_API_URL = "https://api.binance.com"
+
+[[triggers]]
+type = "cron"
+cron = "*/15 * * * *"

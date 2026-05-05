@@ -1,0 +1,372 @@
+---
+interface Props {
+  id: string;
+  value: string;
+  placeholder?: string;
+}
+
+const { id, value = '', placeholder = '0.00' } = Astro.props;
+---
+
+<div class="amount-input-wrapper">
+  <div class="amount-input-container">
+    <input
+      type="text"
+      id={id}
+      class="amount-input"
+      value={value}
+      placeholder={placeholder}
+      inputmode="decimal"
+      autocomplete="off"
+    />
+    <div class="amount-controls">
+      <button type="button" class="amount-btn amount-up" aria-label="Incrementar">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M6 2L10 8H2L6 2Z" fill="currentColor"/>
+        </svg>
+      </button>
+      <button type="button" class="amount-btn amount-down" aria-label="Decrementar">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M6 10L2 4H10L6 10Z" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="amount-in-words" id={`${id}-words`}></div>
+</div>
+
+<style>
+  .amount-input-wrapper {
+    width: 100%;
+  }
+
+  .amount-input-container {
+    display: flex;
+    align-items: stretch;
+    background: var(--bg);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: background 0.15s;
+  }
+
+  .amount-input-container:focus-within {
+    background: var(--surface);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  .amount-input {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 2.5rem;
+    font-weight: 600;
+    text-align: center;
+    border: none;
+    background: transparent;
+    padding: 20px 16px;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    min-width: 0;
+  }
+
+  .amount-input:focus {
+    outline: none;
+  }
+
+  .amount-input::placeholder {
+    color: #CCCCCC;
+    font-weight: 400;
+  }
+
+  .amount-input::-webkit-outer-spin-button,
+  .amount-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .amount-input[type=number] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .amount-controls {
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .amount-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .amount-btn:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .amount-btn:first-child {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .amount-up {
+    border-radius: 0 16px 0 0;
+  }
+
+  .amount-down {
+    border-radius: 0 0 16px 0;
+  }
+
+  .amount-in-words {
+    font-family: var(--font-text);
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 8px 16px;
+    min-height: 24px;
+    font-style: italic;
+  }
+</style>
+
+<script>
+  // Number to Spanish words converter
+  function numberToSpanish(num: number): string {
+    if (isNaN(num) || num === 0) return 'cero';
+
+    const units = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
+    const tens = ['diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
+    const teens = ['dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci'];
+    const hundreds = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
+
+    const floor = Math.floor;
+    const abs = Math.abs;
+
+    function thousands(num: number): string {
+      if (num === 0) return '';
+
+      if (num < 10) {
+        return units[num];
+      }
+
+      if (num < 20) {
+        if (num === 10) return 'diez';
+        return teens[num - 10] + units[num % 10];
+      }
+
+      if (num < 100) {
+        const t = floor(num / 10);
+        const u = num % 10;
+        if (t === 2) return u === 0 ? 'veinte' : 'veinti' + units[u];
+        return tens[t] + (u > 0 ? ' y ' + units[u] : '');
+      }
+
+      if (num < 1000) {
+        const h = floor(num / 100);
+        const rest = num % 100;
+        if (num === 100) return 'cien';
+        if (h === 5) return 'quinientos';
+        if (h === 7) return 'setecientos';
+        if (h === 9) return 'novecientos';
+        return hundreds[h] + (rest > 0 ? ' ' + thousands(rest) : '');
+      }
+
+      if (num < 1000000) {
+        const k = floor(num / 1000);
+        const rest = num % 1000;
+        if (k === 1) {
+          return rest === 0 ? 'mil' : 'mil ' + thousands(rest);
+        }
+        return thousands(k) + ' mil' + (rest > 0 ? ' ' + thousands(rest) : '');
+      }
+
+      if (num < 1000000000) {
+        const m = floor(num / 1000000);
+        const rest = num % 1000000;
+        const millionLabel = m === 1 ? 'millón' : 'millones';
+        return thousands(m) + ' ' + millionLabel + (rest > 0 ? ' ' + thousands(rest) : '');
+      }
+
+      // Billions
+      const b = floor(num / 1000000000);
+      const restB = num % 1000000000;
+      const billionLabel = b === 1 ? 'mil millones' : 'mil millones';
+      return thousands(b) + ' ' + billionLabel + (restB > 0 ? ' ' + thousands(restB) : '');
+    }
+
+    const isNegative = num < 0;
+    num = abs(num);
+
+    const parts = num.toString().split('.');
+    const integerPart = parseInt(parts[0], 10);
+    const decimalPart = parts.length > 1 ? parseInt(parts[1].padEnd(2, '0').substring(0, 2), 10) : 0;
+
+    let result = thousands(integerPart);
+
+    if (decimalPart > 0) {
+      result += ' con ' + decimalPart.toString().padStart(2, '0') + '/100';
+    }
+
+    return isNegative ? 'menos ' + result : result;
+  }
+
+  // Format number with thousands separators
+  function formatNumber(num: string): string {
+    const hasDecimalComma = num.includes(',') && !num.includes('.');
+    const normalized = hasDecimalComma ? num.replace(',', '.') : num;
+    const parts = normalized.split('.');
+    const intPart = parts[0] || '';
+    const decPart = parts[1] || '';
+
+    const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    let result = formattedInt;
+    if (decPart !== '') {
+      result += ',' + decPart;
+    }
+    return result;
+  }
+
+  // Parse input to number
+  function parseAmount(value: string): number {
+    const cleaned = value.replace(/[^\d.,]/g, '');
+    const hasDecimalComma = cleaned.includes(',') && !cleaned.includes('.');
+    const normalized = hasDecimalComma ? cleaned.replace(',', '.') : cleaned;
+    return parseFloat(normalized) || 0;
+  }
+
+  // Update words display
+  function updateWords(inputId: string, value: string) {
+    const wordsEl = document.getElementById(`${inputId}-words`);
+    if (!wordsEl) return;
+
+    const num = parseAmount(value);
+
+    if (num === 0 || isNaN(num)) {
+      wordsEl.textContent = '';
+      return;
+    }
+
+    try {
+      const words = numberToSpanish(num);
+      wordsEl.textContent = words.charAt(0).toUpperCase() + words.slice(1);
+    } catch (e) {
+      wordsEl.textContent = '';
+    }
+  }
+
+  // Initialize all amount inputs
+  document.querySelectorAll('.amount-input').forEach(input => {
+    const el = input as HTMLInputElement;
+    const wrapper = el.closest('.amount-input-container');
+
+    // Format input as user types
+    el.addEventListener('input', (e) => {
+      const target = e.target as HTMLInputElement;
+      let value = target.value;
+
+      // Allow only numbers, commas, dots
+      value = value.replace(/[^\d.,]/g, '');
+
+      // Format with thousands separator
+      const num = parseAmount(value);
+      if (!isNaN(num) && num > 0) {
+        target.value = formatNumber(value);
+      }
+
+      // Update words
+      updateWords(el.id, target.value);
+
+      // Dispatch event for calculation
+      el.dispatchEvent(new CustomEvent('amount-change', { detail: { value: num } }));
+    });
+
+    // Increment/decrement buttons - decimals first!
+    upBtn?.addEventListener('click', () => {
+      const currentStr = el.value;
+      const current = parseAmount(currentStr);
+
+      // Parse into integer and decimal parts
+      const parts = currentStr.replace(/[^\d.,]/g, '').split('.');
+      const intPart = parts[0] || '0';
+      const decPart = (parts[1] || '00').padEnd(2, '0').slice(0, 2);
+
+      // Convert decimal part to number
+      let decNum = parseInt(decPart, 10);
+      let intNum = parseInt(intPart.replace(/\D/g, ''), 10) || 0;
+
+      // Increment decimals first
+      decNum++;
+
+      // Handle decimal overflow (99 + 1 = 100 -> carry to integer)
+      if (decNum >= 100) {
+        decNum = 0;
+        intNum++;
+      }
+
+      const newValue = intNum + decNum / 100;
+      el.value = formatNumber(newValue.toFixed(2).replace('.', ','));
+      updateWords(el.id, el.value);
+      el.dispatchEvent(new CustomEvent('amount-change', { detail: { value: newValue } }));
+      el.focus();
+    });
+
+    downBtn?.addEventListener('click', () => {
+      const currentStr = el.value;
+      const current = parseAmount(currentStr);
+
+      // Parse into integer and decimal parts
+      const parts = currentStr.replace(/[^\d.,]/g, '').split('.');
+      const intPart = parts[0] || '0';
+      const decPart = (parts[1] || '00').padEnd(2, '0').slice(0, 2);
+
+      // Convert decimal part to number
+      let decNum = parseInt(decPart, 10);
+      let intNum = parseInt(intPart.replace(/\D/g, ''), 10) || 0;
+
+      // Decrement decimals first
+      decNum--;
+
+      // Handle decimal underflow
+      if (decNum < 0) {
+        if (intNum > 0) {
+          decNum = 99;
+          intNum--;
+        } else {
+          decNum = 0;
+        }
+      }
+
+      const newValue = intNum + decNum / 100;
+      el.value = formatNumber(newValue.toFixed(2).replace('.', ','));
+      updateWords(el.id, el.value);
+      el.dispatchEvent(new CustomEvent('amount-change', { detail: { value: newValue } }));
+      el.focus();
+    });
+
+    // Initial words update if there's a value
+    if (el.value) {
+      updateWords(el.id, el.value);
+    }
+
+    // Listen for external trigger events (like currency change)
+    el.addEventListener('amount-trigger-calculate', () => {
+      const num = parseAmount(el.value);
+      el.dispatchEvent(new CustomEvent('amount-change', { detail: { value: num } }));
+    });
+  });
+
+  // Re-initialize after Astro swaps
+  document.addEventListener('astro:after-swap', () => {
+    document.querySelectorAll('.amount-input').forEach(input => {
+      const el = input as HTMLInputElement;
+      updateWords(el.id, el.value);
+    });
+  });
+</script>

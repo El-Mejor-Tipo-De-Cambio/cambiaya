@@ -1,0 +1,191 @@
+---
+interface Props {
+  pair: string;
+}
+
+const { pair } = Astro.props;
+---
+
+<div class="stats-panel">
+  <h3>📊 Estadísticas: {pair}</h3>
+
+  <div id="stats-loading" class="stats-loading">
+    <div class="spinner"></div>
+    <span>Cargando estadísticas...</span>
+  </div>
+
+  <div id="stats-error" class="stats-error" style="display: none;">
+    Error al cargar estadísticas
+  </div>
+
+  <div id="stats-content" class="stats-grid" style="display: none;">
+    <div class="stat-item">
+      <div class="stat-label">Promedio 7d</div>
+      <div id="stat-ma7" class="stat-value">-</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">Promedio 30d</div>
+      <div id="stat-ma30" class="stat-value">-</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">Desv. Estándar</div>
+      <div id="stat-stddev" class="stat-value">-</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">Mínimo</div>
+      <div id="stat-min" class="stat-value">-</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">Máximo</div>
+      <div id="stat-max" class="stat-value">-</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">IC 95%</div>
+      <div id="stat-ci" class="stat-value">-</div>
+    </div>
+  </div>
+
+  <div id="stats-insufficient" class="stats-insufficient" style="display: none;">
+    Datos insuficientes para calcular estadísticas. Se necesitan al menos 7 registros.
+  </div>
+</div>
+
+<script define:vars={{ pair }}>
+  const API_BASE = import.meta.env.PUBLIC_API_URL || '/api';
+
+  async function loadStats() {
+    const loadingEl = document.getElementById('stats-loading');
+    const errorEl = document.getElementById('stats-error');
+    const contentEl = document.getElementById('stats-content');
+    const insufficientEl = document.getElementById('stats-insufficient');
+
+    try {
+      const response = await fetch(`${API_BASE}/stats/${encodeURIComponent(pair)}`);
+      const data = await response.json();
+
+      if (data.error) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (errorEl) errorEl.style.display = 'block';
+        return;
+      }
+
+      if (data.insufficient_data) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (insufficientEl) insufficientEl.style.display = 'block';
+        return;
+      }
+
+      // Update values
+      const metrics = data.metrics;
+
+      const ma7El = document.getElementById('stat-ma7');
+      const ma30El = document.getElementById('stat-ma30');
+      const stddevEl = document.getElementById('stat-stddev');
+      const minEl = document.getElementById('stat-min');
+      const maxEl = document.getElementById('stat-max');
+      const ciEl = document.getElementById('stat-ci');
+
+      if (ma7El) ma7El.textContent = isNaN(metrics.movingAverage7d) ? 'N/A' : metrics.movingAverage7d.toFixed(4);
+      if (ma30El) ma30El.textContent = isNaN(metrics.movingAverage30d) ? 'N/A' : metrics.movingAverage30d.toFixed(4);
+      if (stddevEl) stddevEl.textContent = metrics.standardDeviation.toFixed(4);
+      if (minEl) minEl.textContent = metrics.min.toFixed(4);
+      if (maxEl) maxEl.textContent = metrics.max.toFixed(4);
+      if (ciEl) {
+        const ci = metrics.confidenceInterval;
+        ciEl.textContent = isNaN(ci.lower) ? 'N/A' : `${ci.lower.toFixed(4)} - ${ci.upper.toFixed(4)}`;
+      }
+
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (contentEl) contentEl.style.display = 'grid';
+
+    } catch (error) {
+      console.error('Error loading stats:', error);
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (errorEl) errorEl.style.display = 'block';
+    }
+  }
+
+  loadStats();
+</script>
+
+<style>
+  .stats-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+  }
+
+  .stats-panel h3 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: var(--color-text);
+  }
+
+  .stats-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--color-text-muted);
+    padding: 2rem;
+    justify-content: center;
+  }
+
+  .stats-error {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--color-danger);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    color: var(--color-danger);
+  }
+
+  .stats-insufficient {
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--color-text-muted);
+    background: var(--color-bg);
+    border-radius: 0.5rem;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 1rem;
+  }
+
+  .stat-item {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    text-align: center;
+  }
+
+  .stat-label {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>

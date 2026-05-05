@@ -55,6 +55,7 @@ const currencyOptions = [
         <div id="result-box" class="result-box" style="display: none;">
           <div class="result-label">Recibirías</div>
           <div id="result-amount" class="result-amount">—</div>
+          <div id="result-amount-words" class="result-amount-words"></div>
           <div id="result-rate" class="result-rate">—</div>
         </div>
       </div>
@@ -164,6 +165,7 @@ const currencyOptions = [
 
     const resultBox = document.getElementById('result-box')!;
     const resultAmount = document.getElementById('result-amount')!;
+    const resultAmountWords = document.getElementById('result-amount-words')!;
     const resultRate = document.getElementById('result-rate')!;
 
     resultBox.style.display = 'block';
@@ -172,10 +174,77 @@ const currencyOptions = [
       maximumFractionDigits: 2
     })} ${CURRENCIES[toCurrency].flag} ${CURRENCIES[toCurrency].name}`;
 
+    // Show result in words
+    const resultWords = numberToSpanish(result);
+    resultAmountWords.textContent = resultWords.charAt(0).toUpperCase() + resultWords.slice(1);
+
     const rateText = rate < 1
       ? `1 ${fromCurrency} = ${rate.toFixed(6)} ${toCurrency}`
       : `1 ${fromCurrency} = ${rate.toFixed(4)} ${toCurrency}`;
     resultRate.textContent = `${rateText} · ${currentSource === 'binance' ? '📈 Binance' : '📍 Frontera'}`;
+  }
+
+  // Number to Spanish words converter
+  function numberToSpanish(num: number): string {
+    if (isNaN(num) || num === 0) return 'cero';
+
+    const units = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
+    const tens = ['diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
+    const teens = ['dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci', 'dieci'];
+    const hundreds = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
+
+    const floor = Math.floor;
+
+    function thousands(num: number): string {
+      if (num === 0) return '';
+
+      if (num < 10) return units[num];
+      if (num < 20) return num === 10 ? 'diez' : teens[num - 10] + units[num % 10];
+      if (num < 100) {
+        const t = floor(num / 10);
+        const u = num % 10;
+        if (t === 2) return u === 0 ? 'veinte' : 'veinti' + units[u];
+        return tens[t] + (u > 0 ? ' y ' + units[u] : '');
+      }
+      if (num < 1000) {
+        const h = floor(num / 100);
+        const rest = num % 100;
+        if (num === 100) return 'cien';
+        if (h === 5) return 'quinientos';
+        if (h === 7) return 'setecientos';
+        if (h === 9) return 'novecientos';
+        return hundreds[h] + (rest > 0 ? ' ' + thousands(rest) : '');
+      }
+      if (num < 1000000) {
+        const k = floor(num / 1000);
+        const rest = num % 1000;
+        if (k === 1) return rest === 0 ? 'mil' : 'mil ' + thousands(rest);
+        return thousands(k) + ' mil' + (rest > 0 ? ' ' + thousands(rest) : '');
+      }
+      if (num < 1000000000) {
+        const m = floor(num / 1000000);
+        const rest = num % 1000000;
+        const millionLabel = m === 1 ? 'millón' : 'millones';
+        return thousands(m) + ' ' + millionLabel + (rest > 0 ? ' ' + thousands(rest) : '');
+      }
+      const b = floor(num / 1000000000);
+      const restB = num % 1000000000;
+      return thousands(b) + ' mil millones' + (restB > 0 ? ' ' + thousands(restB) : '');
+    }
+
+    const isNegative = num < 0;
+    num = Math.abs(num);
+
+    const parts = num.toString().split('.');
+    const integerPart = parseInt(parts[0], 10);
+    const decimalPart = parts.length > 1 ? parseInt(parts[1].padEnd(2, '0').substring(0, 2), 10) : 0;
+
+    let result = thousands(integerPart);
+    if (decimalPart > 0) {
+      result += ' con ' + decimalPart.toString().padStart(2, '0') + '/100';
+    }
+
+    return isNegative ? 'menos ' + result : result;
   }
 
   // Helper to get current amount from input

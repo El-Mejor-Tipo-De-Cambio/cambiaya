@@ -194,11 +194,9 @@ const { id, value = '', placeholder = '0.00' } = Astro.props;
         return thousands(m) + ' ' + millionLabel + (rest > 0 ? ' ' + thousands(rest) : '');
       }
 
-      // Billions
       const b = floor(num / 1000000000);
       const restB = num % 1000000000;
-      const billionLabel = b === 1 ? 'mil millones' : 'mil millones';
-      return thousands(b) + ' ' + billionLabel + (restB > 0 ? ' ' + thousands(restB) : '');
+      return thousands(b) + ' mil millones' + (restB > 0 ? ' ' + thousands(restB) : '');
     }
 
     const isNegative = num < 0;
@@ -217,38 +215,84 @@ const { id, value = '', placeholder = '0.00' } = Astro.props;
     return isNegative ? 'menos ' + result : result;
   }
 
-  // Format number with thousands separators
-  function formatNumber(num: string): string {
-    const hasDecimalComma = num.includes(',') && !num.includes('.');
-    const normalized = hasDecimalComma ? num.replace(',', '.') : num;
-    const parts = normalized.split('.');
-    const intPart = parts[0] || '';
-    const decPart = parts[1] || '';
+  // Parse input string to number - handles multiple formats
+  function parseAmount(value: string): number {
+    if (!value || value.trim() === '') return 0;
 
-    const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    let result = formattedInt;
-    if (decPart !== '') {
-      result += ',' + decPart;
+    // Remove all whitespace
+    let cleaned = value.replace(/\s/g, '');
+
+    // Count commas and dots
+    const commaCount = (cleaned.match(/,/g) || []).length;
+    const dotCount = (cleaned.match(/\./g) || []).length;
+
+    // Determine decimal separator:
+    // - If only one comma and no dots: comma is decimal (European: 1.234,56)
+    // - If only one dot and no commas: dot is decimal (English: 1,234.56)
+    // - If both exist: last one is decimal separator
+    // - If multiple of same: first is thousands, last is decimal
+
+    let normalized: string;
+    let decimalSeparator: string;
+
+    if (commaCount === 1 && dotCount === 0) {
+      // European format: 1.234,56 or 1234,56
+      decimalSeparator = ',';
+      normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    } else if (dotCount === 1 && commaCount === 0) {
+      // English format: 1234.56
+      decimalSeparator = '.';
+      normalized = cleaned.replace(/,/g, '');
+    } else if (commaCount === 1 && dotCount === 1) {
+      // Both present - determine which is decimal
+      const commaIndex = cleaned.lastIndexOf(',');
+      const dotIndex = cleaned.lastIndexOf('.');
+      if (commaIndex > dotIndex) {
+        // European: 1.234,56
+        decimalSeparator = ',';
+        normalized = cleaned.replace(/\./g, '').replace(',', '.');
+      } else {
+        // English: 1,234.56
+        decimalSeparator = '.';
+        normalized = cleaned.replace(/,/g, '');
+      }
+    } else if (commaCount > 1 && dotCount === 0) {
+      // Multiple commas - European thousands, no decimal
+      normalized = cleaned.replace(/,/g, '');
+    } else if (dotCount > 1 && commaCount === 0) {
+      // Multiple dots - English thousands, no decimal
+      normalized = cleaned.replace(/\./g, '');
+    } else {
+      // Fallback: treat everything as part of number
+      normalized = cleaned.replace(/[^\d.]/g, '');
     }
-    return result;
+
+    const result = parseFloat(normalized);
+    return isNaN(result) ? 0 : result;
   }
 
-  // Parse input to number
-  function parseAmount(value: string): number {
-    const cleaned = value.replace(/[^\d.,]/g, '');
-    const hasDecimalComma = cleaned.includes(',') && !cleaned.includes('.');
-    const normalized = hasDecimalComma ? cleaned.replace(',', '.') : cleaned;
-    return parseFloat(normalized) || 0;
+  // Format number for display with thousands separators
+  function formatForDisplay(num: number): string {
+    if (isNaN(num) || num === 0) return '';
+
+    // Split into integer and decimal parts
+    const parts = num.toString().split('.');
+    const intPart = parts[0];
+    const decPart = parts.length > 1 ? parts[1] : '';
+
+    // Add thousands separators to integer part
+    const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+    // Return with comma as decimal separator (Spanish format)
+    return decPart ? `${formattedInt},${decPart}` : formattedInt;
   }
 
   // Update words display
-  function updateWords(inputId: string, value: string) {
+  function updateWords(inputId: string, num: number) {
     const wordsEl = document.getElementById(`${inputId}-words`);
     if (!wordsEl) return;
 
-    const num = parseAmount(value);
-
-    if (num === 0 || isNaN(num)) {
+    if (!num || num === 0 || isNaN(num)) {
       wordsEl.textContent = '';
       return;
     }
@@ -266,96 +310,70 @@ const { id, value = '', placeholder = '0.00' } = Astro.props;
     const el = input as HTMLInputElement;
     const wrapper = el.closest('.amount-input-container');
 
-    // Format input as user types
+    // Handle input
     el.addEventListener('input', (e) => {
       const target = e.target as HTMLInputElement;
       let value = target.value;
 
-      // Allow only numbers, commas, dots
+      // Keep only valid characters (digits, comma, dot)
       value = value.replace(/[^\d.,]/g, '');
 
-      // Format with thousands separator
+      // Parse to number
       const num = parseAmount(value);
-      if (!isNaN(num) && num > 0) {
-        target.value = formatNumber(value);
+
+      // Only update if valid number
+      if (!isNaN(num) && num >= 0) {
+        // Format for display
+        const formatted = formatForDisplay(num);
+        if (formatted !== target.value) {
+          // Save cursor position
+          const cursor = target.selectionStart;
+          target.value = formatted;
+          // Restore cursor
+          if (cursor !== null && cursor <= formatted.length) {
+            target.setSelectionRange(cursor, cursor);
+          }
+        }
+
+        // Update words
+        updateWords(el.id, num);
+
+        // Dispatch event
+        el.dispatchEvent(new CustomEvent('amount-change', { detail: { value: num } }));
       }
-
-      // Update words
-      updateWords(el.id, target.value);
-
-      // Dispatch event for calculation
-      el.dispatchEvent(new CustomEvent('amount-change', { detail: { value: num } }));
     });
 
     // Increment/decrement buttons - decimals first!
+    const upBtn = wrapper?.querySelector('.amount-up');
+    const downBtn = wrapper?.querySelector('.amount-down');
+
     upBtn?.addEventListener('click', () => {
-      const currentStr = el.value;
-      const current = parseAmount(currentStr);
-
-      // Parse into integer and decimal parts
-      const parts = currentStr.replace(/[^\d.,]/g, '').split('.');
-      const intPart = parts[0] || '0';
-      const decPart = (parts[1] || '00').padEnd(2, '0').slice(0, 2);
-
-      // Convert decimal part to number
-      let decNum = parseInt(decPart, 10);
-      let intNum = parseInt(intPart.replace(/\D/g, ''), 10) || 0;
-
-      // Increment decimals first
-      decNum++;
-
-      // Handle decimal overflow (99 + 1 = 100 -> carry to integer)
-      if (decNum >= 100) {
-        decNum = 0;
-        intNum++;
-      }
-
-      const newValue = intNum + decNum / 100;
-      el.value = formatNumber(newValue.toFixed(2).replace('.', ','));
-      updateWords(el.id, el.value);
+      const current = parseAmount(el.value);
+      const newValue = Math.round((current + 0.01) * 100) / 100;
+      const formatted = formatForDisplay(newValue);
+      el.value = formatted;
+      updateWords(el.id, newValue);
       el.dispatchEvent(new CustomEvent('amount-change', { detail: { value: newValue } }));
       el.focus();
     });
 
     downBtn?.addEventListener('click', () => {
-      const currentStr = el.value;
-      const current = parseAmount(currentStr);
-
-      // Parse into integer and decimal parts
-      const parts = currentStr.replace(/[^\d.,]/g, '').split('.');
-      const intPart = parts[0] || '0';
-      const decPart = (parts[1] || '00').padEnd(2, '0').slice(0, 2);
-
-      // Convert decimal part to number
-      let decNum = parseInt(decPart, 10);
-      let intNum = parseInt(intPart.replace(/\D/g, ''), 10) || 0;
-
-      // Decrement decimals first
-      decNum--;
-
-      // Handle decimal underflow
-      if (decNum < 0) {
-        if (intNum > 0) {
-          decNum = 99;
-          intNum--;
-        } else {
-          decNum = 0;
-        }
-      }
-
-      const newValue = intNum + decNum / 100;
-      el.value = formatNumber(newValue.toFixed(2).replace('.', ','));
-      updateWords(el.id, el.value);
+      const current = parseAmount(el.value);
+      const newValue = Math.max(0, Math.round((current - 0.01) * 100) / 100);
+      const formatted = formatForDisplay(newValue);
+      el.value = formatted;
+      updateWords(el.id, newValue);
       el.dispatchEvent(new CustomEvent('amount-change', { detail: { value: newValue } }));
       el.focus();
     });
 
     // Initial words update if there's a value
     if (el.value) {
-      updateWords(el.id, el.value);
+      const num = parseAmount(el.value);
+      updateWords(el.id, num);
     }
 
-    // Listen for external trigger events (like currency change)
+    // Listen for external trigger events
     el.addEventListener('amount-trigger-calculate', () => {
       const num = parseAmount(el.value);
       el.dispatchEvent(new CustomEvent('amount-change', { detail: { value: num } }));
@@ -366,7 +384,10 @@ const { id, value = '', placeholder = '0.00' } = Astro.props;
   document.addEventListener('astro:after-swap', () => {
     document.querySelectorAll('.amount-input').forEach(input => {
       const el = input as HTMLInputElement;
-      updateWords(el.id, el.value);
+      if (el.value) {
+        const num = parseAmount(el.value);
+        updateWords(el.id, num);
+      }
     });
   });
 </script>
